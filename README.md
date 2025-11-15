@@ -1,1 +1,1 @@
-# critial-one
+# Critical One
