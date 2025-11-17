@@ -1,14 +1,12 @@
 pub mod game;
-pub mod roller;
-
 use axum::{
     Json, Router, extract::{State}, http::StatusCode, routing::{get, post}
 };
-use game::Game;
+use game::{Game, GameError, GameId, GameStatus, PlayerId};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
-use crate::game::{GameId, PlayerId};
+
 
 #[derive(Deserialize)]
 pub struct CreateGameRequest {
@@ -48,8 +46,7 @@ async fn create_game_handler(
 ) -> (StatusCode, Json<CreateGameResponse>) {
 
     let host_id: PlayerId = payload.host_id.unwrap_or(PlayerId::new());
-    let guest_id: PlayerId = PlayerId::new(); // just create a temp player2 for now...
-    let new_game = Game::new(vec![host_id, guest_id]);
+    let new_game = Game::new(host_id);
 
     let response = CreateGameResponse {
         game_id: new_game.id,
