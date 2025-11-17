@@ -1,3 +1,4 @@
+pub mod config;
 pub mod game;
 use axum::{
     Json, Router, extract::{State}, http::StatusCode, routing::{get, post}
@@ -5,7 +6,6 @@ use axum::{
 use game::{Game, GameError, GameId, GameStatus, PlayerId};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-
 
 
 #[derive(Deserialize)]
