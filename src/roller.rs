@@ -16,11 +16,7 @@ impl ThreadRngRoller {
 
 impl Roller for ThreadRngRoller {
     fn roll_in_range(&mut self, max: u32) -> u32 {
-        use rand::Rng; // We only use the Rng trait here
-        
-        // NOTE: If your compiler still shows a deprecation warning for this line,
-        // simply change `gen_range` to `random_range`. This is now the ONLY
-        // place you would ever need to make that change.
+        use rand::Rng; 
         self.rng.random_range(1..=max)
     }
 }
