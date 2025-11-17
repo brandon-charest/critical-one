@@ -1,6 +1,8 @@
 use axum::{Router, routing::get};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod game;
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
