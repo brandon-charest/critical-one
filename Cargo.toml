@@ -1,15 +1,22 @@
 [package]
 name = "critical-one"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+# Web
 axum = "0.8.7"
 tokio = { version = "1", features = ["full"] }
-rand = "0.9.2"
+tower-http = { version = "0.6", features = ["trace"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Utils
+rand = "0.9.2"
 tracing-subscriber = "0.3.20"
-redis = { version = "0.32.7", features = ["tokio-comp"] }
 uuid = { version = "1.8", features = ["v4", "serde"] } 
 
+# Database
+redis = { version = "0.32.7", features = ["tokio-comp"] }

@@ -1,41 +1,43 @@
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-pub trait Roller {
-    fn roll_in_range(&mut self, max: u32) -> u32;
-}
+use crate::roller::Roller;
 
-pub struct ThreadRngRoller {
-    rng: rand::rngs::ThreadRng,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)] // Serialize directly as the inner UUID string
+pub struct PlayerId(Uuid);
 
-impl ThreadRngRoller {
+impl PlayerId {
     pub fn new() -> Self {
-        Self {
-            rng: rand::rng(),
-        }
+        Self(Uuid::new_v4())
     }
 }
 
-impl Roller for ThreadRngRoller {
-    fn roll_in_range(&mut self, max: u32) -> u32 {
-        use rand::Rng; // We only use the Rng trait here
-        
-        // NOTE: If your compiler still shows a deprecation warning for this line,
-        // simply change `gen_range` to `random_range`. This is now the ONLY
-        // place you would ever need to make that change.
-        self.rng.random_range(1..=max)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GameId(Uuid);
+
+impl GameId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
     }
 }
 
-
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GameStatus {
     InProgress,
-    PlayerLost(String),
+    PlayerLost(PlayerId), 
+}
+
+pub enum GameError {
+    GameFinished,
+    NotYourTurn,
 }
 
 #[derive(Debug, Clone)]
 pub struct Game {
-    players: Vec<String>,
+    id: GameId,
+    players: Vec<PlayerId>,
     current_max: u32,
     turn_index: usize,
     status: GameStatus,
@@ -43,8 +45,9 @@ pub struct Game {
 
 
 impl Game {
-    pub fn new(players: Vec<String>) -> Self {
+    pub fn new(players: Vec<PlayerId>) -> Self {
         Self {
+            id: GameId::new(),
             players,
             current_max: 1000,
             turn_index: 0,
@@ -52,7 +55,7 @@ impl Game {
         }
     }
 
-    pub fn current_player(&self) -> Option<&String> {
+    pub fn current_player(&self) -> Option<&PlayerId> {
         self.players.get(self.turn_index)
     }
 
@@ -98,16 +101,17 @@ mod tests {
     }
 
     
-    fn setup_game() -> Game {
-        let players = vec!["Player1".to_string(), "Player2".to_string()];
-        Game::new(players)
+    fn setup_game() -> (Game, PlayerId, PlayerId) {
+        let p1 = PlayerId::new();
+        let p2 = PlayerId::new();
+        let players: Vec<PlayerId> = vec![p1, p2];
+        (Game::new(players), p1, p2)
     }
 
     #[test]
     fn test_new_game_initialization() {
-        let players = vec!["Player1".to_string(), "Player2".to_string()];
-        let game = setup_game();
-        assert_eq!(game.players, players);
+        let (game, p1, p2) = setup_game();
+        assert_eq!(game.players, vec![p1, p2]);
         assert_eq!(game.current_max, 1000);
         assert_eq!(game.turn_index, 0);
         assert_eq!(game.status, GameStatus::InProgress);
@@ -115,22 +119,34 @@ mod tests {
 
     #[test]
     fn test_player_loses_on_roll_of_1() {
-        let mut game = setup_game();
+        let (mut game, p1, p2) = setup_game();
 
         let mut mock_roll = MockRoller { value_to_return: 1 };
 
+        assert_eq!(game.status, GameStatus::InProgress);
         game.roll(&mut mock_roll);
-        assert_eq!(game.status, GameStatus::PlayerLost("Player1".to_string()));
+        assert_eq!(game.status, GameStatus::PlayerLost(p1));
     }
 
     #[test]
     fn test_game_progresses_on_valid_roll() {
-        let mut game = setup_game();
+        let (mut game, p1, p2) = setup_game();
         let mut mock_roll = MockRoller { value_to_return:500 };
+
+        assert_eq!(game.current_player(), Some(&p1));
+        assert_eq!(game.status, GameStatus::InProgress);
 
         game.roll(&mut mock_roll);
         assert_eq!(game.status, GameStatus::InProgress);
         assert_eq!(game.current_max, 500);
         assert_eq!(game.turn_index, 1); // Turn should advance to Player2
+        assert_eq!(game.current_player(), Some(&p2));
+
+        mock_roll.value_to_return = 200;
+        game.roll(&mut mock_roll);
+        assert_eq!(game.status, GameStatus::InProgress);
+        assert_eq!(game.current_max, 200);
+        assert_eq!(game.turn_index, 0); // Turn should advance to Player1
+        assert_eq!(game.current_player(), Some(&p1));
     }
 }
