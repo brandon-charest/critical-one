@@ -1,9 +1,6 @@
 # 🎲 Critical One: A Death Rolling Web App Backend
 
-Backend for the World of Warcraft gambling game "Death Rolling," built with Rust, Axum, and Tokio. This project serves as a learning journey for building professional, real-time web applications in Rust.
-
-[![Rust CI](https://github.com/actions/workflows/rust.yml/badge.svg)](https://github.com/YOUR_USERNAME/critical-one/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Backend for the World of Warcraft gambling game "Death Rolling," built with Rust, Axum, and Tokio. This project serves as a learning journey for building a real-time web applications in Rust.
 
 ## ✨ About The Project
 
