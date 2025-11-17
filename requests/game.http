@@ -1,0 +1,12 @@
+### Health
+# @name checkHealth
+GET http://127.0.0.1:3000/health
+
+### 1. Host creates a game
+# @name createGame
+POST http://127.0.0.1:3000/game
+Content-Type: application/json
+
+{
+    "host_id": "d3b07384-d937-4e3b-9e02-2b2c4d6e1234"
+}

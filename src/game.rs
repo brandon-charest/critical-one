@@ -34,13 +34,13 @@ pub enum GameError {
     NotYourTurn,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Game {
-    id: GameId,
-    players: Vec<PlayerId>,
-    current_max: u32,
-    turn_index: usize,
-    status: GameStatus,
+    pub id: GameId,
+    pub players: Vec<PlayerId>,
+    pub current_max: u32,
+    pub turn_index: usize,
+    pub status: GameStatus,
 }
 
 
