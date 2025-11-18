@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::env;
+use ::config::{ConfigError, Environment, File};
 
 
 
@@ -28,18 +29,52 @@ pub struct Config {
 
 impl Config {
 
-    pub fn load() -> Result<Self, config::ConfigError> {
-        let env = env::var("RUN_ENV").unwrap_or_else(|_| "local".into());
+    pub fn load() -> Result<Self, ConfigError> {
+        let env = env::var("RUN_ENV").unwrap_or_else(|_| "default".into());
+        let mut builder = ::config::Config::builder()
+            .add_source(File::with_name("config/default.toml"));
 
-        let builder = ::config::Config::builder()
-            .add_source(config::File::with_name("config/default.toml"))
-            .add_source(
-                config::File::with_name(&format!("config/{}", env))
-                    .required(false),
-            )
-            .add_source(config::File::with_name("config/local.toml").required(false))
-            .add_source(config::Environment::with_prefix("APP").separator("__"));
+        if env == "production" {
+            builder = builder.add_source(
+                File::with_name("config/production.toml").required(true),
+            );
+        } else if env == "local" {
+            builder = builder.add_source(File::with_name("config/local.toml").required(false));
+        }
 
+        builder = builder.add_source(Environment::with_prefix("APP").separator("__"));
         builder.build()?.try_deserialize()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::env;
+
+
+    #[test]
+    #[serial]
+    fn test_load_defaults() {
+        env::remove_var("RUN_ENV");
+        env::remove_var("APP__SERVER__ADDR");
+
+        let config = Config::load().expect("Failed to load config.");
+        assert_eq!(config.database.redis_url, "redis://127.0.0.1:6379/");
+        assert_eq!(config.logging.level, "info,critical_one=debug,tower_http=debug");
+        assert_eq!(config.server.addr, "127.0.0.1:3000");
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_variable_override() {
+        env::set_var("APP__SERVER__ADDR", "1.2.3.4:9999");
+        env::set_var("RUN_ENV", "production");
+
+        let config = Config::load().expect("Failed to load config");
+
+        // Assert that the environment variable won
+        assert_eq!(config.server.addr, "1.2.3.4:9999");
     }
 }

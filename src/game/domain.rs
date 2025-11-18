@@ -14,6 +14,7 @@ pub struct Game {
 
 
 impl Game {
+    #[tracing::instrument]
     pub fn new(host_id: PlayerId) -> Self {
         Self {
             id: GameId::new(),
@@ -28,10 +29,11 @@ impl Game {
         self.players.get(self.turn_index)
     }
 
-    pub fn next_turn(&mut self) {
+    fn next_turn(&mut self) {
         self.turn_index = (self.turn_index + 1) % self.players.len();
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn handle_roll(&mut self, roll_result: u32) {
         if self.status != GameStatus::InProgress {
             return
@@ -46,6 +48,7 @@ impl Game {
 
     }
 
+    #[tracing::instrument(skip(self, roller))]
     pub fn roll(&mut self, roller: &mut impl Roller) -> Result<u32, GameError> {
         if self.status != GameStatus::InProgress {
             return Err(GameError::GameFinished);
@@ -55,6 +58,4 @@ impl Game {
         self.handle_roll(roll_result);
         Ok(roll_result)
     }
-
-    
 }

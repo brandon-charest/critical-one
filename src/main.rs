@@ -17,7 +17,7 @@ async fn main() {
         .init();
     tracing::info!(run_env = %env, "Starting Critical One server...");
 
-    let app = create_app();
+    let app = create_app(config.clone());
     tracing::info!("Listening on {}", &config.server.addr);
 
     let listener = tokio::net::TcpListener::bind(&config.server.addr)
