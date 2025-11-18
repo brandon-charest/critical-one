@@ -35,18 +35,29 @@ impl fmt::Display for GameId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GameStatus {
     WaitingForPlayers,
     InProgress,
     PlayerLost(PlayerId), 
+    PausedForReconnect(PlayerId),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, thiserror::Error)]
 pub enum GameError {
+    #[error("The current game is already finished.")]
     GameFinished,
-    NotYourTurn,
+    #[error("The game is full and cannot accept a third player.")]
     GameFull,
+    #[error("The game is waiting for another player to join.")]
+    NotEnoughPlayers,
+    #[error("It is not your turn to roll.")]
+    NotYourTurn,
+    #[error("The game is currently paused, waiting for a player to reconnect.")]
+    GamePaused, 
 }
+
+
 
 #[cfg(test)]
 mod tests {

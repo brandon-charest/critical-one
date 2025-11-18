@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 # Web
-axum = "0.8.7"
+axum = { version = "0.8.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["trace"] }
+thiserror = "1.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
