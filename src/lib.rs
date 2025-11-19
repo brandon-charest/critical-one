@@ -3,25 +3,23 @@ pub mod data;
 pub mod error;
 pub mod game;
 pub mod handlers;
-pub mod state; 
+pub mod state;
 
-use config::Config;
-use state::{AppState, GameSessionManager};
 use axum::{
-    Router, 
-    extract::ws::WebSocket, 
-    routing::{get, post}
+    extract::ws::WebSocket,
+    routing::{get, post},
+    Router,
 };
-use game::{GameId};
+use config::Config;
+use game::GameId;
+use state::{AppState, GameSessionManager};
 use std::sync::Arc;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 use crate::data::RedisRepository;
 
-
 pub fn create_app(config: Config) -> Router {
-    let client = redis::Client::open(config.database.redis_url.clone())
-        .expect("Invalid Redis URL");
+    let client = redis::Client::open(config.database.redis_url.clone()).expect("Invalid Redis URL");
 
     let repository = Arc::new(RedisRepository::new(client.clone()));
     let state = Arc::new(AppState {
@@ -35,42 +33,40 @@ pub fn create_app(config: Config) -> Router {
         .route("/game", post(handlers::create_game_handler))
         .route("/game/{id}", get(handlers::get_game_handler))
         .route("/game/{id}/join", post(handlers::join_game_handler))
-        //.route("/ws/game/{id}", get(websocket_handler)) 
+        //.route("/ws/game/{id}", get(websocket_handler))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::default().include_headers(true))
+                .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         )
 }
-
 
 async fn handle_socket(socket: WebSocket, game_id: GameId, state: Arc<AppState>) {
     // TODO: finish me!
     tracing::info!(game_id = %game_id, "WebSocket connection established...");
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tower::ServiceExt;
-    use crate::config::{
-        Config, 
-        ServerConfig, 
-        DatabaseConfig, 
-        LoggingConfig
-    };
+    use crate::config::{Config, DatabaseConfig, LoggingConfig, ServerConfig};
     use axum::{
-        http::{StatusCode, Request},
         body::Body,
+        http::{Request, StatusCode},
     };
-
+    use tower::ServiceExt;
 
     fn test_config() -> Config {
         Config {
-            server: ServerConfig { addr: "0.0.0.0:0".to_string() },
-            database: DatabaseConfig { redis_url: "redis://127.0.0.1:6379/".to_string() },
-            logging: LoggingConfig { level: "info".to_string() },
+            server: ServerConfig {
+                addr: "0.0.0.0:0".to_string(),
+            },
+            database: DatabaseConfig {
+                redis_url: "redis://127.0.0.1:6379/".to_string(),
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+            },
         }
     }
 
@@ -79,12 +75,19 @@ mod tests {
         let config = test_config();
         let app = create_app(config.clone());
         let response = app
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert_eq!(&body[..], b"OK");
     }
 
@@ -94,7 +97,7 @@ mod tests {
         let _ = create_app(config.clone());
         let client = redis::Client::open(config.database.redis_url.clone())
             .expect("Invalid Redis URL in test");
-            
+
         let conn_result = client.get_multiplexed_async_connection().await;
         assert!(conn_result.is_ok(), "Failed to connect to Redis. Ensure Redis server is running on 127.0.0.1:6379 for this test.");
     }

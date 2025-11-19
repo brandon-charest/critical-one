@@ -1,8 +1,6 @@
+use ::config::{ConfigError, Environment, File};
 use serde::Deserialize;
 use std::env;
-use ::config::{ConfigError, Environment, File};
-
-
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
@@ -19,7 +17,6 @@ pub struct LoggingConfig {
     pub level: String,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
@@ -28,16 +25,13 @@ pub struct Config {
 }
 
 impl Config {
-
     pub fn load() -> Result<Self, ConfigError> {
         let env = env::var("RUN_ENV").unwrap_or_else(|_| "default".into());
-        let mut builder = ::config::Config::builder()
-            .add_source(File::with_name("config/default.toml"));
+        let mut builder =
+            ::config::Config::builder().add_source(File::with_name("config/default.toml"));
 
         if env == "production" {
-            builder = builder.add_source(
-                File::with_name("config/production.toml").required(true),
-            );
+            builder = builder.add_source(File::with_name("config/production.toml").required(true));
         } else if env == "local" {
             builder = builder.add_source(File::with_name("config/local.toml").required(false));
         }
@@ -53,7 +47,6 @@ mod tests {
     use serial_test::serial;
     use std::env;
 
-
     #[test]
     #[serial]
     fn test_load_defaults() {
@@ -62,7 +55,10 @@ mod tests {
 
         let config = Config::load().expect("Failed to load config.");
         assert_eq!(config.database.redis_url, "redis://127.0.0.1:6379/");
-        assert_eq!(config.logging.level, "info,critical_one=debug,tower_http=debug");
+        assert_eq!(
+            config.logging.level,
+            "info,critical_one=debug,tower_http=debug"
+        );
         assert_eq!(config.server.addr, "127.0.0.1:3000");
     }
 
@@ -78,7 +74,7 @@ mod tests {
         assert_eq!(config.server.addr, "1.2.3.4:9999");
     }
 
-        #[test]
+    #[test]
     #[serial]
     fn test_env_load_production() {
         env::set_var("RUN_ENV", "production");

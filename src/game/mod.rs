@@ -1,6 +1,6 @@
 pub mod domain;
-pub mod types;
 mod roller;
+pub mod types;
 
 #[cfg(test)]
 mod tests;

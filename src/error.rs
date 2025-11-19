@@ -1,9 +1,9 @@
+use crate::game::types::{GameError, GameId};
 use axum::{
     http::StatusCode,
-    response::{IntoResponse, Response}, 
-    Json
+    response::{IntoResponse, Response},
+    Json,
 };
-use crate::game::types::{GameId, GameError};
 use serde_json::json;
 use thiserror::Error;
 
@@ -33,18 +33,28 @@ impl IntoResponse for AppError {
         let (status, error_message) = match self {
             AppError::Redis(e) => {
                 tracing::error!("Redis error: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "An internal database error occurred".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal database error occurred".to_string(),
+                )
             }
             AppError::Serde(e) => {
                 tracing::error!("Serialization error: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "An internal serialization error occurred".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal serialization error occurred".to_string(),
+                )
             }
-            AppError::GameNotFound(id) => {
-                (StatusCode::NOT_FOUND, format!("Game with id {} not found", id))
-            }
+            AppError::GameNotFound(id) => (
+                StatusCode::NOT_FOUND,
+                format!("Game with id {} not found", id),
+            ),
             AppError::Game(e) => {
                 tracing::warn!("Game logic violation: {}", e);
-                (StatusCode::BAD_REQUEST, format!("Game rule violation: {}", e))
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Game rule violation: {}", e),
+                )
             }
             AppError::Forbidden(msg) => {
                 tracing::warn!("Access denied: {}", msg);
@@ -52,7 +62,10 @@ impl IntoResponse for AppError {
             }
             AppError::Internal(msg) => {
                 tracing::error!("Internal error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "An unexpected error occurred".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An unexpected error occurred".to_string(),
+                )
             }
         };
 
@@ -64,16 +77,20 @@ impl IntoResponse for AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::{to_bytes,Body};
-    use uuid::Uuid;
     use crate::game::types::GameIdTestExt;
-
+    use axum::body::{to_bytes, Body};
+    use uuid::Uuid;
 
     async fn check_response(response: Response<Body>) -> (StatusCode, String) {
         let status = response.status();
         let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        let error_message = body_json.get("error").unwrap().as_str().unwrap().to_string();
+        let error_message = body_json
+            .get("error")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         (status, error_message)
     }
 
@@ -104,7 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_game_rule_violation_response() {
-        let error = AppError::Game(GameError::GameFull); 
+        let error = AppError::Game(GameError::GameFull);
 
         let response = error.into_response();
         let (status, message) = check_response(response).await;

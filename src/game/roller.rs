@@ -8,15 +8,13 @@ pub struct ThreadRngRoller {
 
 impl ThreadRngRoller {
     pub fn new() -> Self {
-        Self {
-            rng: rand::rng(),
-        }
+        Self { rng: rand::rng() }
     }
 }
 
 impl Roller for ThreadRngRoller {
     fn roll_in_range(&mut self, max: u32) -> u32 {
-        use rand::Rng; 
+        use rand::Rng;
         self.rng.random_range(1..=max)
     }
 }

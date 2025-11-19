@@ -39,7 +39,7 @@ impl fmt::Display for GameId {
 pub enum GameStatus {
     WaitingForPlayers,
     InProgress,
-    PlayerLost(PlayerId), 
+    PlayerLost(PlayerId),
     PausedForReconnect(PlayerId),
 }
 
@@ -54,7 +54,7 @@ pub enum GameError {
     #[error("It is not your turn to roll.")]
     NotYourTurn,
     #[error("The game is currently paused, waiting for a player to reconnect.")]
-    GamePaused, 
+    GamePaused,
 }
 
 #[cfg(test)]
@@ -86,7 +86,10 @@ mod tests {
     #[test]
     fn test_player_id_display() {
         let player_id = PlayerId(NIL_UUID);
-        assert_eq!(player_id.to_string(), "00000000-0000-0000-0000-000000000000");
+        assert_eq!(
+            player_id.to_string(),
+            "00000000-0000-0000-0000-000000000000"
+        );
     }
 
     #[test]

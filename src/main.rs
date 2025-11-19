@@ -4,7 +4,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 #[tokio::main]
 async fn main() {
-
     let env: String = env::var("RUN_ENV").unwrap_or_else(|_| "default".into());
     let config: Config = Config::load().expect("Failed to load config.");
 
@@ -21,8 +20,8 @@ async fn main() {
     tracing::info!("Listening on {}", &config.server.addr);
 
     let listener = tokio::net::TcpListener::bind(&config.server.addr)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("server error: {}", e);

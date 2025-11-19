@@ -1,7 +1,6 @@
-use super::types::{GameError, GameId, GameStatus, PlayerId};
 use super::roller::Roller;
+use super::types::{GameError, GameId, GameStatus, PlayerId};
 use serde::{Deserialize, Serialize};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Game {
@@ -11,7 +10,6 @@ pub struct Game {
     turn_index: usize,
     status: GameStatus,
 }
-
 
 impl Game {
     #[tracing::instrument]
@@ -64,7 +62,7 @@ impl Game {
 
     #[tracing::instrument(skip(self))]
     pub fn reconnect(&mut self, player_id: PlayerId) -> Result<(), GameError> {
-        match self.status{
+        match self.status {
             GameStatus::PausedForReconnect(disconnected_player) => {
                 if disconnected_player == player_id {
                     tracing::info!(game_id = %self.id, player_id = %player_id, "Player reconnected. Resuming game.");
@@ -74,12 +72,8 @@ impl Game {
                     Err(GameError::GameFull)
                 }
             }
-            GameStatus::InProgress => {
-                Ok(())
-            }
-            _ => {
-                Err(GameError::GamePaused)
-            }
+            GameStatus::InProgress => Ok(()),
+            _ => Err(GameError::GamePaused),
         }
     }
 
@@ -88,7 +82,7 @@ impl Game {
         if self.status != GameStatus::InProgress {
             return Err(GameError::GameFinished);
         }
-        
+
         self.status = GameStatus::PausedForReconnect(disconnected_player);
         tracing::warn!(game_id = %self.id, player = %disconnected_player, "Game paused due to player disconnect.");
         Ok(())
@@ -113,7 +107,7 @@ impl Game {
     #[tracing::instrument(skip(self))]
     fn handle_roll(&mut self, roll_result: u32) {
         if self.status != GameStatus::InProgress {
-            return
+            return;
         }
 
         if roll_result == 1 {
