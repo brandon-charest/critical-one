@@ -3,6 +3,7 @@ use tokio::sync::{mpsc, RwLock};
 use serde_json::Value;
 
 use crate::config::Config;
+use crate::data::GameRepository;
 use crate::game::{GameId, PlayerId};
 
 
@@ -35,7 +36,7 @@ impl Default for GameSessionManager {
 }
 
 pub struct AppState {
-    pub redis_client: redis::Client, 
+    pub repository: Arc<dyn GameRepository>, 
     pub session_manager: GameSessionManager, 
     pub config: Arc<Config>,
 }

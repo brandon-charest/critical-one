@@ -8,7 +8,6 @@ use tracing::instrument;
 
 use crate::data::{CreateGameRequest, CreateGameResponse, JoinGameRequest}; 
 use crate::error::AppError;
-use crate::data::{load_game, save_game};
 use crate::game::{Game, GameId, PlayerId, GameStatus};
 use crate::state::SharedState;
 
@@ -24,7 +23,7 @@ pub async fn create_game_handler(
     let new_game = Game::new(host_id);
     let game_id = new_game.get_id();
 
-    save_game(&state, &new_game).await?;
+    state.repository.save_game(&new_game).await?;
     let response = CreateGameResponse { 
         game_id, 
         host_id,
@@ -39,7 +38,7 @@ pub async fn get_game_handler(
     State(state): State<SharedState>,
     Path(game_id): Path<GameId>,
 ) -> Result<Json<Game>, AppError> {
-    let game = load_game(&state, game_id).await?;
+    let game = state.repository.load_game(game_id).await?;
     Ok(Json(game))
 }
 
@@ -50,7 +49,7 @@ pub async fn join_game_handler(
     Json(payload): Json<JoinGameRequest>,
 ) -> Result<Json<Game>, AppError> {
 
-    let mut game = load_game(&state, game_id).await?;
+    let mut game = state.repository.load_game(game_id).await?;
 
     let joining_player = payload.player_id.unwrap_or_else(PlayerId::new);
     
@@ -74,7 +73,7 @@ pub async fn join_game_handler(
         }
     }?;
 
-    save_game(&state, &game).await?;
+    state.repository.save_game(&game).await?;
 
     tracing::info!(game_id = %game_id, player_id = %joining_player, "Player joined/reconnected successfully.");
     Ok(Json(game))
@@ -84,20 +83,20 @@ pub async fn join_game_handler(
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::data::MockGameRepository;
     use crate::state::{AppState, GameSessionManager};
     use std::sync::Arc;
 
     async fn setup_test_state() -> SharedState {
-        // We assume Redis is running on localhost default port for tests
+        let repository = Arc::new(MockGameRepository::new());
         let config = Config {
-            server: crate::config::ServerConfig { addr: "0.0.0.0:0".to_string() },
-            database: crate::config::DatabaseConfig { redis_url: "redis://127.0.0.1:6379/".to_string() },
+            server: crate::config::ServerConfig { addr: "0,0,0,0:0".to_string() },
+            database: crate::config::DatabaseConfig { redis_url: "redis://mock".to_string() },
             logging: crate::config::LoggingConfig { level: "debug".to_string() },
         };
 
-        let client = redis::Client::open(config.database.redis_url.clone()).unwrap();    
         Arc::new(AppState {
-            redis_client: client,
+            repository,
             session_manager: GameSessionManager::default(),
             config: Arc::new(config),
         })
@@ -115,7 +114,7 @@ mod tests {
         assert_eq!(status, StatusCode::CREATED);
         
         // Verify in Redis
-        let game_in_redis = load_game(&state, response.game_id).await;
+        let game_in_redis = state.repository.load_game(response.game_id).await;
         assert!(game_in_redis.is_ok());
     }
 

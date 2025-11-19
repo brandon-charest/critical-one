@@ -1,11 +1,10 @@
+use async_trait::async_trait;
 use redis::{AsyncCommands};
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 use serde_json;
 
 use crate::game::{Game, GameId, PlayerId};
 use crate::error::AppError;
-use crate::state::SharedState;
 
 // --- DTOs (Data Transfer Objects) ---
 #[derive(Debug, Deserialize)]
@@ -22,35 +21,83 @@ pub struct CreateGameResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct JoinGameRequest {
-    // The ID of the player trying to join/reconnect
     pub player_id: Option<PlayerId>, 
 }
 
-// --- Data Service Methods (Repository) ---
-#[instrument(skip_all)]
-pub async fn load_game(state: &SharedState, game_id: GameId) -> Result<Game, AppError> {
-    let mut conn = state.redis_client.get_multiplexed_async_connection().await?;
-    let key = format!("game:{}", game_id);
-    
-    let game_json: String = conn.get(&key).await
-        .map_err(|e| {
-            if e.kind() == redis::ErrorKind::ResponseError && format!("{:?}", e).contains("nil") {
-                AppError::GameNotFound(game_id)
-            } else {
-                AppError::Redis(e)
-            }
-        })?;
-    
-    let game: Game = serde_json::from_str(&game_json)?;
-    Ok(game)
+#[async_trait]
+pub trait GameRepository: Send + Sync {
+    async fn load_game(&self, game_id: GameId) -> Result<Game, AppError>;
+    async fn save_game(&self, game: &Game) -> Result<(), AppError>;
 }
 
-#[instrument(skip_all)]
-pub async fn save_game(state: &SharedState, game: &Game) -> Result<(), AppError> {
-    let mut conn = state.redis_client.get_multiplexed_async_connection().await?;
-    let key = format!("game:{}", game.get_id());
-    let game_json = serde_json::to_string(game)?;
-    
-    conn.set_ex::<_, _, ()>(&key, game_json, 86400).await?; 
-    Ok(())
+pub struct RedisRepository {
+    redis_client: redis::Client,
+}
+
+impl RedisRepository {
+    pub fn new(redis_client: redis::Client) -> Self {
+        Self { redis_client }
+    }
+}
+
+#[async_trait]
+impl GameRepository for RedisRepository {
+    async fn load_game(&self, game_id: GameId) -> Result<Game, AppError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let key = format!("game:{}", game_id);
+        
+        let game_json: String = conn.get(&key).await
+            .map_err(|e| {
+                if e.kind() == redis::ErrorKind::ResponseError && format!("{:?}", e).contains("nil") {
+                    AppError::GameNotFound(game_id)
+                } else {
+                    AppError::Redis(e)
+                }
+            })?;
+        
+        let game: Game = serde_json::from_str(&game_json)?;
+        Ok(game)
+    }
+
+    async fn save_game(&self, game: &Game) -> Result<(), AppError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let key = format!("game:{}", game.get_id());
+        let game_json = serde_json::to_string(game)?;
+        
+        conn.set_ex::<_, _, ()>(&key, game_json, 86400).await?; 
+        Ok(())
+    }
+}
+
+// --- Mock Implementation (For Tests) ---
+
+use tokio::sync::RwLock;
+use std::collections::HashMap;
+
+pub struct MockGameRepository {
+    storage: RwLock<HashMap<GameId, Game>>,
+}
+
+impl MockGameRepository {
+    pub fn new() -> Self {
+        Self {
+            storage: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl GameRepository for MockGameRepository {
+    async fn load_game(&self, game_id: GameId) -> Result<Game, AppError> {
+        let store = self.storage.read().await;
+        store.get(&game_id)
+            .cloned()
+            .ok_or(AppError::GameNotFound(game_id))
+    }
+
+    async fn save_game(&self, game: &Game) -> Result<(), AppError> {
+        let mut store = self.storage.write().await;
+        store.insert(game.get_id(), game.clone());
+        Ok(())
+    }
 }

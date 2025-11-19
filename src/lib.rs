@@ -16,13 +16,16 @@ use game::{GameId};
 use std::sync::Arc;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
+use crate::data::RedisRepository;
+
 
 pub fn create_app(config: Config) -> Router {
     let client = redis::Client::open(config.database.redis_url.clone())
         .expect("Invalid Redis URL");
-    
+
+    let repository = Arc::new(RedisRepository::new(client.clone()));
     let state = Arc::new(AppState {
-        redis_client: client,
+        repository,
         session_manager: GameSessionManager::default(),
         config: Arc::new(config),
     });
