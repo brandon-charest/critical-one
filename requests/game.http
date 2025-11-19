@@ -1,12 +1,50 @@
-### Health
+@baseUrl = http://127.0.0.1:3000
+### ------------------------------------------------------------------------
+### 1. System Health Check
+### ------------------------------------------------------------------------
 # @name checkHealth
-GET http://127.0.0.1:3000/health
+GET {{baseUrl}}/health
 
-### 1. Host creates a game
+### ------------------------------------------------------------------------
+### 2. Create a New Game (As Host)
+### ------------------------------------------------------------------------
+# We send a specific host_id to simulate a logged-in user.
+# If you send {}, the server will generate a random ID for you.
 # @name createGame
-POST http://127.0.0.1:3001/game
+POST {{baseUrl}}/game
 Content-Type: application/json
 
 {
     "host_id": "d3b07384-d937-4e3b-9e02-2b2c4d6e1232"
+}
+
+### ------------------------------------------------------------------------
+### 3. Get Game State (As a Spectator/Loading Screen)
+### ------------------------------------------------------------------------
+# We capture the game_id from the response of request #2 automatically.
+@gameId = {{createGame.response.body.game_id}}
+
+GET {{baseUrl}}/game/{{gameId}}
+
+### ------------------------------------------------------------------------
+### 4. Join the Game (As Guest)
+### ------------------------------------------------------------------------
+# We use a different player ID for the guest.
+# @name joinGame
+POST {{baseUrl}}/game/{{gameId}}/join
+Content-Type: application/json
+
+{
+    "host_id": "e4c18495-e048-5f4c-af13-3c3d5e7f5678"
+}
+
+### ------------------------------------------------------------------------
+### 5. Error Test: Try to Join Full Game (As Intruder)
+### ------------------------------------------------------------------------
+# This should return 400 Bad Request because the game now has 2 players.
+POST {{baseUrl}}/game/{{gameId}}/join
+Content-Type: application/json
+
+{
+    "host_id": "99999999-9999-9999-9999-999999999999"
 }

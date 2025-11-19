@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 # Web
-axum = "0.8.7"
+axum = { version = "0.8.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["trace"] }
+thiserror = "2.0.17"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -19,7 +20,12 @@ tracing = "0.1.37"
 tracing-subscriber = {version ="0.3.20" , features = ["env-filter"]}
 uuid = { version = "1.8", features = ["v4", "serde"] } 
 config = "0.15.19"
-serial_test = "3.2.0"
 
 # Database
 redis = { version = "0.32.7", features = ["tokio-comp"] }
+
+[dev-dependencies]
+serial_test = "3.2.0"
+hyper = { version = "1.8.1", features = ["full"] }
+tower = "0.5.2"
+redis-test = "0.13.0"

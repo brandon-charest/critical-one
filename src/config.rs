@@ -77,4 +77,15 @@ mod tests {
         // Assert that the environment variable won
         assert_eq!(config.server.addr, "1.2.3.4:9999");
     }
+
+        #[test]
+    #[serial]
+    fn test_env_load_production() {
+        env::set_var("RUN_ENV", "production");
+
+        let config = Config::load().expect("Failed to load config");
+
+        // Assert that the environment variable won
+        assert_eq!(config.server.addr, "127.0.0.1:8080");
+    }
 }
