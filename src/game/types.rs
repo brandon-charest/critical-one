@@ -57,7 +57,24 @@ pub enum GameError {
     GamePaused, 
 }
 
+#[cfg(test)]
+pub trait GameIdTestExt {
+    fn from_uuid(uuid: Uuid) -> Self;
+}
 
+#[cfg(test)]
+impl GameIdTestExt for GameId {
+    fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+#[cfg(test)]
+impl GameIdTestExt for PlayerId {
+    fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
 
 #[cfg(test)]
 mod tests {

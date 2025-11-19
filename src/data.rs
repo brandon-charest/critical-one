@@ -20,6 +20,12 @@ pub struct CreateGameResponse {
     //pub invite_code: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct JoinGameRequest {
+    // The ID of the player trying to join/reconnect
+    pub player_id: Option<PlayerId>, 
+}
+
 // --- Data Service Methods (Repository) ---
 #[instrument(skip_all)]
 pub async fn load_game(state: &SharedState, game_id: GameId) -> Result<Game, AppError> {

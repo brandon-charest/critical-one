@@ -5,7 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 #[tokio::main]
 async fn main() {
 
-    let env: String = env::var("RUN_ENV").unwrap_or_else(|_| "local".into());
+    let env: String = env::var("RUN_ENV").unwrap_or_else(|_| "default".into());
     let config: Config = Config::load().expect("Failed to load config.");
 
     tracing_subscriber::registry()
