@@ -2,20 +2,19 @@ pub trait Roller {
     fn roll_in_range(&mut self, max: u32) -> u32;
 }
 
-pub struct ThreadRngRoller {
-    rng: rand::rngs::ThreadRng,
-}
+#[derive(Default)]
+pub struct ThreadRngRoller;
 
 impl ThreadRngRoller {
     pub fn new() -> Self {
-        Self { rng: rand::rng() }
+        Self
     }
 }
 
 impl Roller for ThreadRngRoller {
     fn roll_in_range(&mut self, max: u32) -> u32 {
         use rand::Rng;
-        self.rng.random_range(1..=max)
+        rand::rng().random_range(1..=max)
     }
 }
 

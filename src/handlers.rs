@@ -1,15 +1,30 @@
 use axum::{
-    extract::{Path, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Path, Query, State,
+    },
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
-
+use futures::{sink::SinkExt, stream::StreamExt};
+use serde::Deserialize;
 use tracing::instrument;
 
-use crate::data::{CreateGameRequest, CreateGameResponse, JoinGameRequest};
-use crate::error::AppError;
-use crate::game::{Game, GameId, GameStatus, PlayerId};
 use crate::state::SharedState;
+use crate::{
+    data::ClientMessage,
+    game::{roller::ThreadRngRoller, Game, GameId, GameStatus, PlayerId},
+};
+use crate::{
+    data::{CreateGameRequest, CreateGameResponse, JoinGameRequest, ServerMessage},
+    state::GameMessage,
+};
+use crate::{error::AppError, state::GameSession};
+
+// ==============================================================================
+// === REST API Handlers
+// =============================================================================
 
 #[instrument(skip(state))]
 pub async fn create_game_handler(
@@ -72,6 +87,222 @@ pub async fn join_game_handler(
 
     tracing::info!(game_id = %game_id, player_id = %joining_player, "Player joined/reconnected successfully.");
     Ok(Json(game))
+}
+
+// ==============================================================================
+// === Websocket Handlers
+// =============================================================================
+
+async fn broadcast_message(state: &SharedState, game_id: GameId, message: ServerMessage) {
+    let sessions = state.session_manager.sessions.read().await;
+    if let Some(session) = sessions.get(&game_id) {
+        let players = session.players.read().await;
+        for (pid, sender) in players.iter() {
+            let internal_msg = GameMessage {
+                r#type: "SERVER_PUSH".to_string(),
+                payload: serde_json::to_value(&message).unwrap(),
+            };
+            let _ = sender.send(internal_msg);
+            tracing::debug!(game_id = %game_id, to_player = %pid, "Broadcasted message");
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct WebSocketParams {
+    pub player_id: PlayerId,
+}
+
+#[instrument(skip(ws, state))]
+pub async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    Path(game_id): Path<GameId>,
+    Query(params): Query<WebSocketParams>,
+    State(state): State<SharedState>,
+) -> impl IntoResponse {
+    tracing::info!(game_id = %game_id, player_id = %params.player_id, "WebSocket upgrade requested.");
+    ws.on_upgrade(move |socket| handle_socket(socket, game_id, params.player_id, state))
+}
+
+async fn handle_socket(
+    mut socket: WebSocket,
+    game_id: GameId,
+    player_id: PlayerId,
+    state: SharedState,
+) {
+    tracing::info!(game_id = %game_id, player_id = %player_id, "WebSocket connected.");
+
+    // 1. Verify connections
+    if !validate_connection(&state, game_id, player_id).await {
+        let _ = socket.close().await;
+        return;
+    }
+
+    // 2. Register Session & Notify
+    let (sender_tx, mut sender_rx) = register_player_session(&state, game_id, player_id).await;
+
+    // 3. Split Socket
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+
+    // 4. Spawn Write Task (Server -> Client)
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = sender_rx.recv().await {
+            let json_str = serde_json::to_string(&msg.payload).unwrap_or_default();
+            if ws_sender
+                .send(Message::Text(json_str.into()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+
+    // 5. Read Loop (Client -> Server)
+    while let Some(Ok(msg)) = ws_receiver.next().await {
+        if let Message::Text(text) = msg {
+            if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
+                process_client_message(client_msg, game_id, player_id, &state).await;
+            }
+        }
+    }
+
+    // 6. Cleanup on Disconnect
+    handle_disconnect(&state, game_id, player_id).await;
+    send_task.abort();
+}
+
+/// Verify player is in the game stored in Redis
+async fn validate_connection(state: &SharedState, game_id: GameId, player_id: PlayerId) -> bool {
+    let game_check = state.repository.load_game(game_id).await;
+    if let Err(e) = game_check {
+        tracing::warn!(game_id = %game_id, player_id = %player_id, error = ?e, "Connection rejected: Game load failed.");
+        return false;
+    }
+    let game = game_check.unwrap();
+    if !game.get_players().contains(&player_id) {
+        tracing::warn!(game_id = %game_id, player_id = %player_id, "Connection rejected: Player not in game.");
+        return false;
+    }
+    true
+}
+
+/// Add player to SessionManager and return their message receiver
+async fn register_player_session(
+    state: &SharedState,
+    game_id: GameId,
+    player_id: PlayerId,
+) -> (
+    tokio::sync::mpsc::UnboundedSender<GameMessage>,
+    tokio::sync::mpsc::UnboundedReceiver<GameMessage>,
+) {
+    let (sender_tx, sender_rx) = tokio::sync::mpsc::unbounded_channel::<GameMessage>();
+
+    {
+        let mut sessions = state.session_manager.sessions.write().await;
+        let session = sessions
+            .entry(game_id)
+            .or_insert_with(|| std::sync::Arc::new(GameSession::default()));
+        session
+            .players
+            .write()
+            .await
+            .insert(player_id, sender_tx.clone());
+    }
+
+    broadcast_message(state, game_id, ServerMessage::OpponentJoined { player_id }).await;
+    (sender_tx, sender_rx)
+}
+
+/// Route incoming messages to logic
+async fn process_client_message(
+    msg: ClientMessage,
+    game_id: GameId,
+    player_id: PlayerId,
+    state: &SharedState,
+) {
+    tracing::debug!(game_id = %game_id, player_id = %player_id, "Received message: {:#?}", msg);
+    match msg {
+        ClientMessage::Connect { .. } => {} // No-op
+        ClientMessage::Roll => handle_roll_command(game_id, player_id, state).await,
+    }
+}
+
+/// Execute the ROLL command logic
+async fn handle_roll_command(game_id: GameId, player_id: PlayerId, state: &SharedState) {
+    if let Ok(mut game) = state.repository.load_game(game_id).await {
+        // Check Turn
+        if game.get_current_player() != Some(&player_id) {
+            send_error_to_player(state, game_id, player_id, "Not your turn").await;
+            return;
+        }
+
+        // Execute Roll
+        let mut roller = ThreadRngRoller::new();
+        match game.roll(&mut roller) {
+            Ok(rolled_val) => {
+                if let Err(e) = state.repository.save_game(&game).await {
+                    tracing::error!("Failed to save game state: {}", e);
+                } else {
+                    broadcast_message(
+                        state,
+                        game_id,
+                        ServerMessage::RollResult {
+                            player_id,
+                            rolled_value: rolled_val,
+                        },
+                    )
+                    .await;
+                    broadcast_message(state, game_id, ServerMessage::GameState(game)).await;
+                }
+            }
+            Err(e) => {
+                send_error_to_player(state, game_id, player_id, &e.to_string()).await;
+            }
+        }
+    }
+}
+
+/// Cleanup when socket closes
+async fn handle_disconnect(state: &SharedState, game_id: GameId, player_id: PlayerId) {
+    tracing::info!(game_id = %game_id, player_id = %player_id, "WebSocket disconnected.");
+
+    // Remove from session
+    {
+        let sessions = state.session_manager.sessions.read().await;
+        if let Some(session) = sessions.get(&game_id) {
+            session.players.write().await.remove(&player_id);
+        }
+    }
+
+    // Update Redis state to Paused
+    if let Ok(mut game) = state.repository.load_game(game_id).await {
+        if *game.get_status() == GameStatus::InProgress {
+            let _ = game.pause_game(player_id);
+            let _ = state.repository.save_game(&game).await;
+            broadcast_message(state, game_id, ServerMessage::GameState(game)).await;
+        }
+    }
+}
+
+/// Send an error message to a specific player
+async fn send_error_to_player(
+    state: &SharedState,
+    game_id: GameId,
+    player_id: PlayerId,
+    msg: &str,
+) {
+    if let Some(session) = state.session_manager.sessions.read().await.get(&game_id) {
+        if let Some(sender) = session.players.read().await.get(&player_id) {
+            let _ = sender.send(GameMessage {
+                r#type: "ERROR".into(),
+                payload: serde_json::to_value(ServerMessage::Error {
+                    message: msg.into(),
+                })
+                .unwrap(),
+            });
+        }
+    }
 }
 
 #[cfg(test)]

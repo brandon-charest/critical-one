@@ -24,6 +24,29 @@ pub struct JoinGameRequest {
     pub player_id: Option<PlayerId>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", content = "payload", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ClientMessage {
+    Connect { player_id: PlayerId },
+    Roll,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "type", content = "payload", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ServerMessage {
+    GameState(Game),
+    Error {
+        message: String,
+    },
+    OpponentJoined {
+        player_id: PlayerId,
+    },
+    RollResult {
+        player_id: PlayerId,
+        rolled_value: u32,
+    },
+}
+
 #[async_trait]
 pub trait GameRepository: Send + Sync {
     async fn load_game(&self, game_id: GameId) -> Result<Game, AppError>;

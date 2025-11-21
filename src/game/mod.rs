@@ -1,5 +1,5 @@
 pub mod domain;
-mod roller;
+pub mod roller;
 pub mod types;
 
 #[cfg(test)]

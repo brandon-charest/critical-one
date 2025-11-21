@@ -6,17 +6,19 @@ pub mod handlers;
 pub mod state;
 
 use axum::{
-    extract::ws::WebSocket,
+    http::Method,
     routing::{get, post},
     Router,
 };
 use config::Config;
-use game::GameId;
 use state::{AppState, GameSessionManager};
 use std::sync::Arc;
-use tower_http::trace::{DefaultMakeSpan, TraceLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::{DefaultMakeSpan, TraceLayer},
+};
 
-use crate::data::RedisRepository;
+use crate::{data::RedisRepository, handlers::websocket_handler};
 
 pub fn create_app(config: Config) -> Router {
     let client = redis::Client::open(config.database.redis_url.clone()).expect("Invalid Redis URL");
@@ -28,22 +30,23 @@ pub fn create_app(config: Config) -> Router {
         config: Arc::new(config),
     });
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any)
+        .allow_headers(Any);
+
     Router::new()
         .route("/health", get(|| async { "OK" }))
         .route("/game", post(handlers::create_game_handler))
         .route("/game/{id}", get(handlers::get_game_handler))
         .route("/game/{id}/join", post(handlers::join_game_handler))
-        //.route("/ws/game/{id}", get(websocket_handler))
+        .route("/ws/game/{id}", get(websocket_handler))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         )
-}
-
-async fn handle_socket(socket: WebSocket, game_id: GameId, state: Arc<AppState>) {
-    // TODO: finish me!
-    tracing::info!(game_id = %game_id, "WebSocket connection established...");
+        .layer(cors)
 }
 
 #[cfg(test)]
