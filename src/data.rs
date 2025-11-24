@@ -38,12 +38,19 @@ pub enum ServerMessage {
     Error {
         message: String,
     },
-    OpponentJoined {
+    PlayerJoined {
         player_id: PlayerId,
     },
     RollResult {
         player_id: PlayerId,
         rolled_value: u32,
+    },
+    GameStarted {
+        game: Game,
+    },
+    GameOver {
+        winner_id: PlayerId,
+        loser_id: PlayerId,
     },
 }
 

@@ -85,6 +85,17 @@ pub async fn join_game_handler(
 
     state.repository.save_game(&game).await?;
 
+    if *game.get_status() == GameStatus::InProgress {
+        if game.get_players().len() == 2 {
+            broadcast_message(
+                &state,
+                game_id,
+                ServerMessage::GameStarted { game: game.clone() },
+            )
+            .await;
+        }
+    }
+
     tracing::info!(game_id = %game_id, player_id = %joining_player, "Player joined/reconnected successfully.");
     Ok(Json(game))
 }
@@ -124,6 +135,7 @@ pub async fn websocket_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, game_id, params.player_id, state))
 }
 
+/// Orchestrates the WebSocket lifecycle: Connect -> Register -> Loop -> Disconnect
 async fn handle_socket(
     mut socket: WebSocket,
     game_id: GameId,
@@ -210,7 +222,7 @@ async fn register_player_session(
             .insert(player_id, sender_tx.clone());
     }
 
-    broadcast_message(state, game_id, ServerMessage::OpponentJoined { player_id }).await;
+    broadcast_message(state, game_id, ServerMessage::PlayerJoined { player_id }).await;
     (sender_tx, sender_rx)
 }
 
@@ -244,6 +256,8 @@ async fn handle_roll_command(game_id: GameId, player_id: PlayerId, state: &Share
                 if let Err(e) = state.repository.save_game(&game).await {
                     tracing::error!("Failed to save game state: {}", e);
                 } else {
+                    //// === Broadcasts ===
+                    // Roll
                     broadcast_message(
                         state,
                         game_id,
@@ -253,6 +267,26 @@ async fn handle_roll_command(game_id: GameId, player_id: PlayerId, state: &Share
                         },
                     )
                     .await;
+
+                    // Game Over
+                    if let GameStatus::PlayerLost(loser_id) = *game.get_status() {
+                        let players = game.get_players();
+                        let winner_id = players
+                            .iter()
+                            .find(|&p| *p != loser_id)
+                            .cloned()
+                            .unwrap_or(player_id);
+                        broadcast_message(
+                            state,
+                            game_id,
+                            ServerMessage::GameOver {
+                                winner_id: winner_id,
+                                loser_id: loser_id,
+                            },
+                        )
+                        .await;
+                    }
+
                     broadcast_message(state, game_id, ServerMessage::GameState(game)).await;
                 }
             }
