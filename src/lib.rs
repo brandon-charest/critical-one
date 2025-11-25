@@ -25,11 +25,8 @@ pub fn create_app(config: Config) -> Router {
     let client = redis::Client::open(config.database.redis_url.clone()).expect("Invalid Redis URL");
 
     let repository = Arc::new(RedisRepository::new(client.clone()));
-    let state = Arc::new(AppState {
-        repository,
-        session_manager: GameSessionManager::default(),
-        config: Arc::new(config),
-    });
+    let state =
+        Arc::new(AppState { repository, session_manager: GameSessionManager::default(), config: Arc::new(config) });
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
@@ -60,9 +57,7 @@ mod tests {
     fn test_config() -> Config {
         Config {
             server: ServerConfig { addr: "0.0.0.0:0".to_string() },
-            database: DatabaseConfig {
-                redis_url: "redis://127.0.0.1:6379/".to_string(),
-            },
+            database: DatabaseConfig { redis_url: "redis://127.0.0.1:6379/".to_string() },
             logging: LoggingConfig { level: "info".to_string() },
         }
     }

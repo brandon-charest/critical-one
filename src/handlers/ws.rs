@@ -39,10 +39,8 @@ async fn broadcast_message(state: &SharedState, game_id: GameId, message: Server
     if let Some(session) = sessions.get(&game_id) {
         let players = session.players.read().await;
         for (pid, sender) in players.iter() {
-            let internal_msg = GameMessage {
-                r#type: "SERVER_PUSH".to_string(),
-                payload: serde_json::to_value(&message).unwrap(),
-            };
+            let internal_msg =
+                GameMessage { r#type: "SERVER_PUSH".to_string(), payload: serde_json::to_value(&message).unwrap() };
             let _ = sender.send(internal_msg);
             tracing::debug!(game_id = %game_id, to_player = %pid, "Broadcasted message");
         }
@@ -239,11 +237,7 @@ mod ws_logic_tests {
             logging: crate::config::LoggingConfig { level: "debug".to_string() },
         };
 
-        Arc::new(AppState {
-            repository,
-            session_manager: GameSessionManager::default(),
-            config: Arc::new(config),
-        })
+        Arc::new(AppState { repository, session_manager: GameSessionManager::default(), config: Arc::new(config) })
     }
 
     #[tokio::test]
@@ -269,10 +263,7 @@ mod ws_logic_tests {
         let sessions = state.session_manager.sessions.read().await;
         assert!(sessions.contains_key(&game_id));
         assert!(tx
-            .send(GameMessage {
-                r#type: "TEST".into(),
-                payload: serde_json::Value::Null
-            })
+            .send(GameMessage { r#type: "TEST".into(), payload: serde_json::Value::Null })
             .is_ok());
     }
 

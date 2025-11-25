@@ -91,22 +91,12 @@ mod tests {
     async fn setup_test_state() -> SharedState {
         let repository = Arc::new(MockGameRepository::new());
         let config = Config {
-            server: crate::config::ServerConfig {
-                addr: "0,0,0,0:0".to_string(),
-            },
-            database: crate::config::DatabaseConfig {
-                redis_url: "redis://mock".to_string(),
-            },
-            logging: crate::config::LoggingConfig {
-                level: "debug".to_string(),
-            },
+            server: crate::config::ServerConfig { addr: "0,0,0,0:0".to_string() },
+            database: crate::config::DatabaseConfig { redis_url: "redis://mock".to_string() },
+            logging: crate::config::LoggingConfig { level: "debug".to_string() },
         };
 
-        Arc::new(AppState {
-            repository,
-            session_manager: GameSessionManager::default(),
-            config: Arc::new(config),
-        })
+        Arc::new(AppState { repository, session_manager: GameSessionManager::default(), config: Arc::new(config) })
     }
 
     #[tokio::test]
@@ -129,12 +119,8 @@ mod tests {
     async fn test_get_game_handler_success() {
         let state = setup_test_state().await;
         let host_id = PlayerId::new();
-        let payload = CreateGameRequest {
-            host_id: Some(host_id),
-        };
-        let (_, Json(created)) = create_game_handler(State(state.clone()), Json(payload))
-            .await
-            .unwrap();
+        let payload = CreateGameRequest { host_id: Some(host_id) };
+        let (_, Json(created)) = create_game_handler(State(state.clone()), Json(payload)).await.unwrap();
 
         let result = get_game_handler(State(state.clone()), Path(created.game_id)).await;
 
@@ -149,25 +135,14 @@ mod tests {
     async fn test_join_game_success() {
         let state = setup_test_state().await;
         let host_id = PlayerId::new();
-        let payload = CreateGameRequest {
-            host_id: Some(host_id),
-        };
-        let (_, Json(created)) = create_game_handler(State(state.clone()), Json(payload))
-            .await
-            .unwrap();
+        let payload = CreateGameRequest { host_id: Some(host_id) };
+        let (_, Json(created)) = create_game_handler(State(state.clone()), Json(payload)).await.unwrap();
 
         // Join with new player
         let guest_id = PlayerId::new();
-        let join_payload = JoinGameRequest {
-            player_id: Some(guest_id),
-        };
+        let join_payload = JoinGameRequest { player_id: Some(guest_id) };
 
-        let result = join_game_handler(
-            State(state.clone()),
-            Path(created.game_id),
-            Json(join_payload),
-        )
-        .await;
+        let result = join_game_handler(State(state.clone()), Path(created.game_id), Json(join_payload)).await;
 
         assert!(result.is_ok());
         let Json(game) = result.unwrap();
@@ -180,23 +155,17 @@ mod tests {
     async fn test_join_full_game_fails() {
         let state = setup_test_state().await;
         let host_id = PlayerId::new();
-        let (_, Json(created)) = create_game_handler(
-            State(state.clone()),
-            Json(CreateGameRequest {
-                host_id: Some(host_id),
-            }),
-        )
-        .await
-        .unwrap();
+        let (_, Json(created)) =
+            create_game_handler(State(state.clone()), Json(CreateGameRequest { host_id: Some(host_id) }))
+                .await
+                .unwrap();
 
         // Add Player 2 (Game becomes Full)
         let p2_id = PlayerId::new();
         let _ = join_game_handler(
             State(state.clone()),
             Path(created.game_id),
-            Json(JoinGameRequest {
-                player_id: Some(p2_id),
-            }),
+            Json(JoinGameRequest { player_id: Some(p2_id) }),
         )
         .await
         .unwrap();
@@ -206,9 +175,7 @@ mod tests {
         let result = join_game_handler(
             State(state.clone()),
             Path(created.game_id),
-            Json(JoinGameRequest {
-                player_id: Some(intruder_id),
-            }),
+            Json(JoinGameRequest { player_id: Some(intruder_id) }),
         )
         .await;
 

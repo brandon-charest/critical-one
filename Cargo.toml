@@ -7,8 +7,8 @@ edition = "2021"
 # Web
 axum = { version = "0.8.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["trace", "cors"] }
-tokio-tungstenite = { version = "*" }
+tower-http = { version = "0.6.7", features = ["trace", "cors"] }
+tokio-tungstenite = { version = "0.28.0" }
 thiserror = "2.0.17"
 futures = "0.3.31"
 reqwest = { version = "0.12.24", features = ["json"] }
@@ -30,6 +30,5 @@ redis = { version = "0.32.7", features = ["tokio-comp"] }
 
 [dev-dependencies]
 serial_test = "3.2.0"
-hyper = { version = "1.8.1", features = ["full"] }
 tower = "0.5.2"
 redis-test = "0.13.0"

@@ -20,7 +20,7 @@ tab_spaces = 4
 # Put function arguments on separate lines if they exceed max_width
 fn_args_layout = "Tall"
 # Format struct literals nicely
-struct_lit_width = 40
+struct_lit_width = 100
 
 # --- Comments ---
 # Wrap comments that are too long

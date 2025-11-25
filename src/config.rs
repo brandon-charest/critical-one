@@ -27,8 +27,7 @@ pub struct Config {
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         let env = env::var("RUN_ENV").unwrap_or_else(|_| "default".into());
-        let mut builder =
-            ::config::Config::builder().add_source(File::with_name("config/default.toml"));
+        let mut builder = ::config::Config::builder().add_source(File::with_name("config/default.toml"));
 
         if env == "production" {
             builder = builder.add_source(File::with_name("config/production.toml").required(true));
@@ -55,10 +54,7 @@ mod tests {
 
         let config = Config::load().expect("Failed to load config.");
         assert_eq!(config.database.redis_url, "redis://127.0.0.1:6379/");
-        assert_eq!(
-            config.logging.level,
-            "info,critical_one=debug,tower_http=debug"
-        );
+        assert_eq!(config.logging.level, "info,critical_one=debug,tower_http=debug");
         assert_eq!(config.server.addr, "127.0.0.1:3000");
     }
 
