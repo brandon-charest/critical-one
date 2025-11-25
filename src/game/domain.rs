@@ -1,3 +1,5 @@
+use crate::game::types::GameEvent;
+
 use super::roller::Roller;
 use super::types::{GameError, GameId, GameStatus, PlayerId};
 use serde::{Deserialize, Serialize};
@@ -17,8 +19,8 @@ impl Game {
         Self {
             id: GameId::new(),
             players: vec![host_id],
-            current_max: 1000,
-            turn_index: 0,
+            current_max: 1000, // TODO: make configurable
+            turn_index: 0,     // TODO: is there a better way to handle this?
             status: GameStatus::WaitingForPlayers,
         }
     }
@@ -89,14 +91,29 @@ impl Game {
     }
 
     #[tracing::instrument(skip(self, roller))]
-    pub fn roll(&mut self, roller: &mut impl Roller) -> Result<u32, GameError> {
-        if self.status != GameStatus::InProgress {
-            return Err(GameError::GameFinished);
+    pub fn roll(
+        &mut self,
+        player_id: PlayerId,
+        roller: &mut impl Roller,
+    ) -> Result<Vec<GameEvent>, GameError> {
+        match self.status {
+            GameStatus::InProgress => {} // OK to proceed
+            GameStatus::WaitingForPlayers => return Err(GameError::NotEnoughPlayers),
+            GameStatus::PausedForReconnect(_) => return Err(GameError::GamePaused),
+            GameStatus::PlayerLost(_) => return Err(GameError::GameFinished),
+        }
+
+        // check if roll is by current player!
+        if self.get_current_player() != Some(&player_id) {
+            return Err(GameError::NotYourTurn);
         }
 
         let roll_result = roller.roll_in_range(self.current_max);
-        self.handle_roll(roll_result);
-        Ok(roll_result)
+        let mut events = vec![];
+
+        self.handle_roll(player_id, roll_result, &mut events);
+
+        Ok(events)
     }
 
     //  --- Private helpers ---
@@ -105,13 +122,33 @@ impl Game {
     }
 
     #[tracing::instrument(skip(self))]
-    fn handle_roll(&mut self, roll_result: u32) {
+    fn handle_roll(&mut self, player_id: PlayerId, roll_result: u32, events: &mut Vec<GameEvent>) {
         if self.status != GameStatus::InProgress {
             return;
         }
 
+        events.push(GameEvent::Rolled {
+            player_id,
+            value: roll_result,
+        });
+
+        // Game Over Logic
         if roll_result == 1 {
-            self.status = GameStatus::PlayerLost(self.get_current_player().unwrap().clone());
+            self.status = GameStatus::PlayerLost(player_id);
+
+            // Calculate winner (the other player)
+            let winner_id = self
+                .players
+                .iter()
+                .find(|&p| *p != player_id)
+                .cloned()
+                .unwrap_or(player_id); // Fallback should never happen in 2p game
+
+            // Event: Game Over
+            events.push(GameEvent::GameOver {
+                winner_id,
+                loser_id: player_id,
+            });
         } else {
             self.current_max = roll_result;
             self.next_turn();

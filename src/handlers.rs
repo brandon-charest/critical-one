@@ -11,7 +11,6 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use serde::Deserialize;
 use tracing::instrument;
 
-use crate::state::SharedState;
 use crate::{
     data::ClientMessage,
     game::{roller::ThreadRngRoller, Game, GameId, GameStatus, PlayerId},
@@ -21,6 +20,7 @@ use crate::{
     state::GameMessage,
 };
 use crate::{error::AppError, state::GameSession};
+use crate::{game::types::GameEvent, state::SharedState};
 
 // ==============================================================================
 // === REST API Handlers
@@ -243,52 +243,47 @@ async fn process_client_message(
 /// Execute the ROLL command logic
 async fn handle_roll_command(game_id: GameId, player_id: PlayerId, state: &SharedState) {
     if let Ok(mut game) = state.repository.load_game(game_id).await {
-        // Check Turn
-        if game.get_current_player() != Some(&player_id) {
-            send_error_to_player(state, game_id, player_id, "Not your turn").await;
-            return;
-        }
-
-        // Execute Roll
         let mut roller = ThreadRngRoller::new();
-        match game.roll(&mut roller) {
-            Ok(rolled_val) => {
+
+        // Roll
+        match game.roll(player_id, &mut roller) {
+            Ok(events) => {
+                // Save
                 if let Err(e) = state.repository.save_game(&game).await {
                     tracing::error!("Failed to save game state: {}", e);
-                } else {
-                    //// === Broadcasts ===
-                    // Roll
-                    broadcast_message(
-                        state,
-                        game_id,
-                        ServerMessage::RollResult {
-                            player_id,
-                            rolled_value: rolled_val,
-                        },
-                    )
-                    .await;
-
-                    // Game Over
-                    if let GameStatus::PlayerLost(loser_id) = *game.get_status() {
-                        let players = game.get_players();
-                        let winner_id = players
-                            .iter()
-                            .find(|&p| *p != loser_id)
-                            .cloned()
-                            .unwrap_or(player_id);
-                        broadcast_message(
-                            state,
-                            game_id,
-                            ServerMessage::GameOver {
-                                winner_id: winner_id,
-                                loser_id: loser_id,
-                            },
-                        )
-                        .await;
-                    }
-
-                    broadcast_message(state, game_id, ServerMessage::GameState(game)).await;
+                    return;
                 }
+
+                for event in events {
+                    match event {
+                        GameEvent::Rolled { player_id, value } => {
+                            broadcast_message(
+                                state,
+                                game_id,
+                                ServerMessage::RollResult {
+                                    player_id,
+                                    rolled_value: value,
+                                },
+                            )
+                            .await
+                        }
+                        GameEvent::GameOver {
+                            winner_id,
+                            loser_id,
+                        } => {
+                            broadcast_message(
+                                state,
+                                game_id,
+                                ServerMessage::GameOver {
+                                    winner_id,
+                                    loser_id,
+                                },
+                            )
+                            .await
+                        }
+                    }
+                }
+                broadcast_message(state, game_id, ServerMessage::GameState(game)).await;
             }
             Err(e) => {
                 send_error_to_player(state, game_id, player_id, &e.to_string()).await;
@@ -345,6 +340,7 @@ mod tests {
     use crate::config::Config;
     use crate::data::MockGameRepository;
     use crate::state::{AppState, GameSessionManager};
+    use axum::http::StatusCode;
     use std::sync::Arc;
 
     async fn setup_test_state() -> SharedState {
@@ -448,7 +444,7 @@ mod tests {
         .await
         .unwrap();
 
-        // 2. Add Player 2 (Game becomes Full)
+        // Add Player 2 (Game becomes Full)
         let p2_id = PlayerId::new();
         let _ = join_game_handler(
             State(state.clone()),
@@ -460,7 +456,7 @@ mod tests {
         .await
         .unwrap();
 
-        // 3. Try to add Player 3
+        // Try to add Player 3
         let intruder_id = PlayerId::new();
         let result = join_game_handler(
             State(state.clone()),
@@ -482,6 +478,93 @@ mod tests {
     #[tokio::test]
     async fn test_reconnect_allowed() {
         let state = setup_test_state().await;
+
+        // Setup Game
+        let host_id = PlayerId::new();
+        let (_, Json(created)) = create_game_handler(
+            State(state.clone()),
+            Json(CreateGameRequest {
+                host_id: Some(host_id),
+            }),
+        )
+        .await
+        .unwrap();
+        let guest_id = PlayerId::new();
+        let _ = join_game_handler(
+            State(state.clone()),
+            Path(created.game_id),
+            Json(JoinGameRequest {
+                player_id: Some(guest_id),
+            }),
+        )
+        .await
+        .unwrap();
+
+        // Register Guest (so we can check they receive the pause notification)
+        let (_, mut guest_rx) = register_player_session(&state, created.game_id, guest_id).await;
+        let _ = guest_rx.recv().await; // Drain initial
+
+        // Host Disconnects
+        handle_disconnect(&state, created.game_id, host_id).await;
+
+        // Verify State Update in Redis
+        let game = state.repository.load_game(created.game_id).await.unwrap();
+        match *game.get_status() {
+            GameStatus::PausedForReconnect(pid) => assert_eq!(pid, host_id),
+            _ => panic!("Game should be paused"),
+        }
+
+        // Verify Broadcast to Guest
+        let msg = guest_rx
+            .recv()
+            .await
+            .expect("Guest missed pause notification");
+        let server_msg: ServerMessage = serde_json::from_value(msg.payload).unwrap();
+        if let ServerMessage::GameState(g) = server_msg {
+            match g.get_status() {
+                GameStatus::PausedForReconnect(pid) => assert_eq!(*pid, host_id),
+                _ => panic!("Broadcasted game state should be paused"),
+            }
+        } else {
+            panic!("Expected GameState broadcast");
+        }
+    }
+}
+
+#[cfg(test)]
+mod ws_logic_tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::config::Config;
+    use crate::data::MockGameRepository;
+    use crate::game::GameStatus;
+    use crate::state::{AppState, GameSessionManager};
+
+    async fn setup_test_state() -> SharedState {
+        let repository = Arc::new(MockGameRepository::new());
+        let config = Config {
+            server: crate::config::ServerConfig {
+                addr: "0,0,0,0:0".to_string(),
+            },
+            database: crate::config::DatabaseConfig {
+                redis_url: "redis://mock".to_string(),
+            },
+            logging: crate::config::LoggingConfig {
+                level: "debug".to_string(),
+            },
+        };
+
+        Arc::new(AppState {
+            repository,
+            session_manager: GameSessionManager::default(),
+            config: Arc::new(config),
+        })
+    }
+
+    #[tokio::test]
+    async fn test_validate_connection() {
+        let state = setup_test_state().await;
         let host_id = PlayerId::new();
         let (_, Json(created)) = create_game_handler(
             State(state.clone()),
@@ -492,30 +575,160 @@ mod tests {
         .await
         .unwrap();
 
-        // 2. Add Player 2
-        let p2_id = PlayerId::new();
+        assert!(validate_connection(&state, created.game_id, host_id).await);
+        let random_id = PlayerId::new();
+        assert!(!validate_connection(&state, created.game_id, random_id).await);
+    }
+
+    #[tokio::test]
+    async fn test_register_player_session() {
+        let state = setup_test_state().await;
+        let game_id = GameId::new();
+        let player_id = PlayerId::new();
+        let (tx, _rx) = register_player_session(&state, game_id, player_id).await;
+        let sessions = state.session_manager.sessions.read().await;
+        assert!(sessions.contains_key(&game_id));
+        assert!(tx
+            .send(GameMessage {
+                r#type: "TEST".into(),
+                payload: serde_json::Value::Null
+            })
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_roll_command_flow() {
+        let state = setup_test_state().await;
+        let host_id = PlayerId::new();
+        let (_, Json(created)) = create_game_handler(
+            State(state.clone()),
+            Json(CreateGameRequest {
+                host_id: Some(host_id),
+            }),
+        )
+        .await
+        .unwrap();
+        let guest_id = PlayerId::new();
         let _ = join_game_handler(
             State(state.clone()),
             Path(created.game_id),
             Json(JoinGameRequest {
-                player_id: Some(p2_id),
+                player_id: Some(guest_id),
             }),
         )
         .await
         .unwrap();
 
-        // 3. Host "reconnects"
-        let result = join_game_handler(
+        let (_, mut host_rx) = register_player_session(&state, created.game_id, host_id).await;
+        let (_, mut guest_rx) = register_player_session(&state, created.game_id, guest_id).await;
+
+        let _ = host_rx.recv().await;
+        let _ = guest_rx.recv().await;
+        let _ = host_rx.recv().await;
+
+        handle_roll_command(created.game_id, host_id, &state).await;
+
+        let msg1 = host_rx.recv().await.expect("Host missed message 1");
+        let msg2 = host_rx.recv().await.expect("Host missed message 2");
+
+        let server_msg1: ServerMessage =
+            serde_json::from_value(msg1.payload.clone()).expect("Failed to deserialize msg1");
+        let server_msg2: ServerMessage =
+            serde_json::from_value(msg2.payload.clone()).expect("Failed to deserialize msg2");
+
+        let (roll_result, game_state) = match (server_msg1.clone(), server_msg2.clone()) {
+            (
+                ServerMessage::RollResult {
+                    player_id,
+                    rolled_value,
+                },
+                ServerMessage::GameState(g),
+            ) => (Some((player_id, rolled_value)), Some(g)),
+            (
+                ServerMessage::GameState(g),
+                ServerMessage::RollResult {
+                    player_id,
+                    rolled_value,
+                },
+            ) => (Some((player_id, rolled_value)), Some(g)),
+            _ => (None, None),
+        };
+
+        assert!(
+            roll_result.is_some(),
+            "Host did not receive RollResult. Received: {:?} and {:?}",
+            server_msg1,
+            server_msg2
+        );
+        assert!(game_state.is_some(), "Host did not receive GameState");
+
+        let (r_pid, r_val) = roll_result.unwrap();
+        assert_eq!(r_pid, host_id);
+        assert!(r_val > 0 && r_val <= 1000);
+
+        let _ = guest_rx.recv().await.expect("Guest missed message 1");
+        let _ = guest_rx.recv().await.expect("Guest missed message 2");
+    }
+
+    #[tokio::test]
+    async fn test_handle_disconnect_pauses_game() {
+        let state = setup_test_state().await;
+
+        // 1. Setup Game
+        let host_id = PlayerId::new();
+        let (_, Json(created)) = create_game_handler(
+            State(state.clone()),
+            Json(CreateGameRequest {
+                host_id: Some(host_id),
+            }),
+        )
+        .await
+        .unwrap();
+        let guest_id = PlayerId::new();
+        let _ = join_game_handler(
             State(state.clone()),
             Path(created.game_id),
             Json(JoinGameRequest {
-                player_id: Some(host_id),
+                player_id: Some(guest_id),
             }),
         )
-        .await;
+        .await
+        .unwrap();
 
-        assert!(result.is_ok());
-        let Json(game) = result.unwrap();
-        assert_eq!(*game.get_status(), GameStatus::InProgress);
+        // Register Guest
+        let (_, mut guest_rx) = register_player_session(&state, created.game_id, guest_id).await;
+        let _ = guest_rx.recv().await;
+
+        // Host Disconnects
+        handle_disconnect(&state, created.game_id, host_id).await;
+
+        // Verify State Update in Redis
+        let game = state.repository.load_game(created.game_id).await.unwrap();
+        match *game.get_status() {
+            GameStatus::PausedForReconnect(pid) => assert_eq!(pid, host_id),
+            _ => panic!("Game should be paused"),
+        }
+
+        // Verify Broadcast to Guest
+        // Guest should receive GameState with status Paused
+        let msg = guest_rx.recv().await.expect("Guest missed message");
+        let server_msg: ServerMessage = serde_json::from_value(msg.payload).unwrap();
+
+        // If first msg is PlayerJoined, ignore and get next
+        let final_msg = if let ServerMessage::PlayerJoined { .. } = server_msg {
+            let msg2 = guest_rx.recv().await.expect("Guest missed second message");
+            serde_json::from_value(msg2.payload).unwrap()
+        } else {
+            server_msg
+        };
+
+        if let ServerMessage::GameState(g) = final_msg {
+            match g.get_status() {
+                GameStatus::PausedForReconnect(pid) => assert_eq!(*pid, host_id),
+                _ => panic!("Broadcasted game state should be paused"),
+            }
+        } else {
+            panic!("Expected GameState broadcast, got {:?}", final_msg);
+        }
     }
 }

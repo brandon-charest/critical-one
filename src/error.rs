@@ -129,4 +129,13 @@ mod tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(message.contains("The game is full"));
     }
+    #[tokio::test]
+    async fn test_internal_server_error_response() {
+        let error = AppError::Internal("Something blew up".to_string());
+        let response = error.into_response();
+        let (status, message) = check_response(response).await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(message, "An unexpected error occurred"); // The generic message we return to client
+    }
 }
