@@ -31,7 +31,7 @@ pub enum ClientMessage {
     Roll,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type", content = "payload", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ServerMessage {
     GameState(Game),

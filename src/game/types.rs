@@ -57,6 +57,18 @@ pub enum GameError {
     GamePaused,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum GameEvent {
+    Rolled {
+        player_id: PlayerId,
+        value: u32,
+    },
+    GameOver {
+        winner_id: PlayerId,
+        loser_id: PlayerId,
+    },
+}
+
 #[cfg(test)]
 pub trait GameIdTestExt {
     fn from_uuid(uuid: Uuid) -> Self;
