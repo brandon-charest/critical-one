@@ -45,16 +45,10 @@ impl IntoResponse for AppError {
                     "An internal serialization error occurred".to_string(),
                 )
             }
-            AppError::GameNotFound(id) => (
-                StatusCode::NOT_FOUND,
-                format!("Game with id {} not found", id),
-            ),
+            AppError::GameNotFound(id) => (StatusCode::NOT_FOUND, format!("Game with id {} not found", id)),
             AppError::Game(e) => {
                 tracing::warn!("Game logic violation: {}", e);
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("Game rule violation: {}", e),
-                )
+                (StatusCode::BAD_REQUEST, format!("Game rule violation: {}", e))
             }
             AppError::Forbidden(msg) => {
                 tracing::warn!("Access denied: {}", msg);
@@ -85,12 +79,7 @@ mod tests {
         let status = response.status();
         let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        let error_message = body_json
-            .get("error")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
+        let error_message = body_json.get("error").unwrap().as_str().unwrap().to_string();
         (status, error_message)
     }
 

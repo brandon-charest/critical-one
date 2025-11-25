@@ -91,11 +91,7 @@ impl Game {
     }
 
     #[tracing::instrument(skip(self, roller))]
-    pub fn roll(
-        &mut self,
-        player_id: PlayerId,
-        roller: &mut impl Roller,
-    ) -> Result<Vec<GameEvent>, GameError> {
+    pub fn roll(&mut self, player_id: PlayerId, roller: &mut impl Roller) -> Result<Vec<GameEvent>, GameError> {
         match self.status {
             GameStatus::InProgress => {} // OK to proceed
             GameStatus::WaitingForPlayers => return Err(GameError::NotEnoughPlayers),
@@ -127,10 +123,7 @@ impl Game {
             return;
         }
 
-        events.push(GameEvent::Rolled {
-            player_id,
-            value: roll_result,
-        });
+        events.push(GameEvent::Rolled { player_id, value: roll_result });
 
         // Game Over Logic
         if roll_result == 1 {
@@ -145,10 +138,7 @@ impl Game {
                 .unwrap_or(player_id); // Fallback should never happen in 2p game
 
             // Event: Game Over
-            events.push(GameEvent::GameOver {
-                winner_id,
-                loser_id: player_id,
-            });
+            events.push(GameEvent::GameOver { winner_id, loser_id: player_id });
         } else {
             self.current_max = roll_result;
             self.next_turn();

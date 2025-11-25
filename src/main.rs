@@ -8,10 +8,7 @@ async fn main() {
     let config: Config = Config::load().expect("Failed to load config.");
 
     tracing_subscriber::registry()
-        .with(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| config.logging.level.clone().into()),
-        )
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| config.logging.level.clone().into()))
         .with(tracing_subscriber::fmt::layer())
         .init();
     tracing::info!(run_env = %env, "Starting Critical One server...");
@@ -19,9 +16,7 @@ async fn main() {
     let app = create_app(config.clone());
     tracing::info!("Listening on {}", &config.server.addr);
 
-    let listener = tokio::net::TcpListener::bind(&config.server.addr)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&config.server.addr).await.unwrap();
 
     if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("server error: {}", e);

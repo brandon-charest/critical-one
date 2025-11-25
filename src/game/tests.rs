@@ -48,9 +48,7 @@ fn test_roll_flow() {
     game.join(guest_id).unwrap();
 
     // 1. Fail: Wrong Turn
-    let mut roller = MockRoller {
-        value_to_return: 500,
-    };
+    let mut roller = MockRoller { value_to_return: 500 };
     let err = game.roll(guest_id, &mut roller);
     assert_eq!(err, Err(GameError::NotYourTurn));
 
@@ -82,13 +80,7 @@ fn test_game_over_loss() {
 
     // Should have Rolled AND GameOver events
     assert_eq!(events.len(), 2);
-    assert!(matches!(
-        events[1],
-        GameEvent::GameOver {
-            winner_id: _,
-            loser_id: _
-        }
-    ));
+    assert!(matches!(events[1], GameEvent::GameOver { winner_id: _, loser_id: _ }));
 
     match *game.get_status() {
         GameStatus::PlayerLost(pid) => assert_eq!(pid, host_id),
@@ -111,9 +103,7 @@ fn test_disconnect_and_reconnect() {
     assert!(matches!(game.get_status(), GameStatus::PausedForReconnect(pid) if *pid == host_id));
 
     // 2. Attempt Roll while Paused (Should Fail)
-    let mut roller = MockRoller {
-        value_to_return: 500,
-    };
+    let mut roller = MockRoller { value_to_return: 500 };
     let err = game.roll(guest_id, &mut roller);
     assert_eq!(err, Err(GameError::GamePaused));
 

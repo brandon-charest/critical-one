@@ -1,0 +1,35 @@
+edition = "2021"
+
+# --- Imports ---
+# Sort imports alphabetically (Standard practice)
+reorder_imports = true
+# Merge imports from the same crate (e.g., use crate::{a, b})
+imports_granularity = "Crate"
+# Group imports: std, external, crate
+group_imports = "StdExternalCrate"
+
+# --- Code Style ---
+# Max line length (Default is 100, some prefer 80 or 120)
+max_width = 120
+# Use Unix line endings
+newline_style = "Unix"
+# Use 4 spaces for indentation (Non-negotiable in Rust)
+tab_spaces = 4
+
+# --- Functions & Structs ---
+# Put function arguments on separate lines if they exceed max_width
+fn_args_layout = "Tall"
+# Format struct literals nicely
+struct_lit_width = 40
+
+# --- Comments ---
+# Wrap comments that are too long
+wrap_comments = true
+# Convert /* */ comments to // comments where possible
+normalize_comments = true
+
+# --- Macros ---
+# Try to format macro bodies (can be hit or miss, but usually good)
+format_macro_bodies = true
+# Format string literals (e.g., split long strings)
+format_strings = true

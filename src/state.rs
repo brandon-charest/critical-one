@@ -27,9 +27,7 @@ pub struct GameSessionManager {
 
 impl Default for GameSessionManager {
     fn default() -> Self {
-        Self {
-            sessions: RwLock::new(HashMap::new()),
-        }
+        Self { sessions: RwLock::new(HashMap::new()) }
     }
 }
 

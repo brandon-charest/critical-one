@@ -59,14 +59,8 @@ pub enum GameError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum GameEvent {
-    Rolled {
-        player_id: PlayerId,
-        value: u32,
-    },
-    GameOver {
-        winner_id: PlayerId,
-        loser_id: PlayerId,
-    },
+    Rolled { player_id: PlayerId, value: u32 },
+    GameOver { winner_id: PlayerId, loser_id: PlayerId },
 }
 
 #[cfg(test)]
@@ -98,10 +92,7 @@ mod tests {
     #[test]
     fn test_player_id_display() {
         let player_id = PlayerId(NIL_UUID);
-        assert_eq!(
-            player_id.to_string(),
-            "00000000-0000-0000-0000-000000000000"
-        );
+        assert_eq!(player_id.to_string(), "00000000-0000-0000-0000-000000000000");
     }
 
     #[test]

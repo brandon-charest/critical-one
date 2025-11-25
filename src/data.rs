@@ -35,23 +35,11 @@ pub enum ClientMessage {
 #[serde(tag = "type", content = "payload", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ServerMessage {
     GameState(Game),
-    Error {
-        message: String,
-    },
-    PlayerJoined {
-        player_id: PlayerId,
-    },
-    RollResult {
-        player_id: PlayerId,
-        rolled_value: u32,
-    },
-    GameStarted {
-        game: Game,
-    },
-    GameOver {
-        winner_id: PlayerId,
-        loser_id: PlayerId,
-    },
+    Error { message: String },
+    PlayerJoined { player_id: PlayerId },
+    RollResult { player_id: PlayerId, rolled_value: u32 },
+    GameStarted { game: Game },
+    GameOver { winner_id: PlayerId, loser_id: PlayerId },
 }
 
 #[async_trait]
@@ -109,9 +97,7 @@ pub struct MockGameRepository {
 
 impl MockGameRepository {
     pub fn new() -> Self {
-        Self {
-            storage: RwLock::new(HashMap::new()),
-        }
+        Self { storage: RwLock::new(HashMap::new()) }
     }
 }
 
@@ -119,10 +105,7 @@ impl MockGameRepository {
 impl GameRepository for MockGameRepository {
     async fn load_game(&self, game_id: GameId) -> Result<Game, AppError> {
         let store = self.storage.read().await;
-        store
-            .get(&game_id)
-            .cloned()
-            .ok_or(AppError::GameNotFound(game_id))
+        store.get(&game_id).cloned().ok_or(AppError::GameNotFound(game_id))
     }
 
     async fn save_game(&self, game: &Game) -> Result<(), AppError> {
